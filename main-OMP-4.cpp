@@ -4,6 +4,7 @@
 #include <random>
 #include <cmath>
 #include <fstream>
+#include <omp.h>
 #include <chrono>
 
 using namespace std;
@@ -127,8 +128,9 @@ void print_grid(const vector<vector<Point>>& points) {
 
 double get_scalar(const vector<double>& vec_1, const vector<double>& vec_2, const double h_1, const double h_2) {
     double res = 0;
+    #pragma omp parallel for reduction (+:res)
     for (int i = 0; i < vec_1.size(); i++) {
-        res += vec_1[i] * vec_2[i] * h_1 * h_2;
+            res += vec_1[i] * vec_2[i] * h_1 * h_2;
     }
     return res;
 }
@@ -138,7 +140,7 @@ double get_norm(const vector<double>& vec, const double h_1, const double h_2) {
 }
 
 void mult(const vector<vector<double>>& matrix, const vector<double>& w, vector<double>& result, const int grid_size) {
-
+    #pragma omp parallel for
     for (int i = grid_size + 2; i < matrix.size() - grid_size - 2; i++) {
         double tmp = 0.0;
         tmp += matrix[i][i] * w[i];
@@ -152,6 +154,7 @@ void mult(const vector<vector<double>>& matrix, const vector<double>& w, vector<
 }
 
 void sub(const vector<double>& vec_1, const vector<double>& vec_2, vector<double>& result) {
+    #pragma omp parallel for
     for (int i = 0; i < vec_1.size(); i++) {
         result[i] = vec_1[i] - vec_2[i];
     }
@@ -159,17 +162,9 @@ void sub(const vector<double>& vec_1, const vector<double>& vec_2, vector<double
 }
 
 void multiply(vector<double>& vec, const double tau) {
+    #pragma omp parallel for
     for (int i = 0; i < vec.size(); i++) {
         vec[i] *= tau;
-    }
-    return;
-}
-
-void transform_F(const vector<double>& F, vector<vector<double>>& result) {
-    for (int i = 0; i < result.size(); i++) {
-        for (int j = 0; j < result[i].size(); j++) {
-            result[i][j] = F[i * result[i].size() + j];
-        }
     }
     return;
 }
@@ -198,7 +193,10 @@ vector<double> resolve(const vector<vector<double>>& A, const vector<double>& F,
         d = get_norm(w_k_1_w_k, h_1, h_2);
         if (counter % 500 == 0)
             cout << d << endl;
-        if (d < delta) break;
+        if (d < delta) {
+            cout << "final delta is: " << d << endl;
+            break;
+        }
         else w_k = w_k_1;
     } while (true);
     return w_k_1;
@@ -208,7 +206,8 @@ int main()
 {
     cout << "start" << endl;
     auto start = chrono::steady_clock::now();
-    const int grid_size = 40;
+    omp_set_num_threads(4);
+    const int grid_size = 80;
     const double A_1 = -0.5, B_1 = 3.5, A_2 = -0.5, B_2 = 3.5;
     const double h_1 = (B_1 - A_1) / grid_size, h_2 = (B_2 - A_2) / grid_size;
     const double eps = h_1 > h_2 ? h_1 * h_1 : h_2 * h_2;
@@ -220,15 +219,20 @@ int main()
         y_vals_in[i] = A_2 + i * h_2;
     }
     vector<vector<Point>> points(grid_size + 1, vector<Point>(grid_size + 1, Point{ 0.0, 0.0 }));
+    #pragma omp parallel for
     for (int i = 0; i < grid_size + 1; i++) {
+        #pragma omp parallel for
         for (int j = 0; j < grid_size + 1; j++) {
             points[i][j] = Point{ x_vals_in[j], y_vals_in[i] };
         }
     }
+
     vector<vector<double>> A((grid_size + 1) * (grid_size + 1), vector<double>((grid_size + 1) * (grid_size + 1), 0.0));
 
     vector<double> F((grid_size + 1) * (grid_size + 1), 0.0);
+    #pragma omp parallel for
     for (int i = 1; i < grid_size; i++) {
+        #pragma omp parallel for
         for (int j = 1; j < grid_size; j++) {
             Point up_left = Point{ points[i][j].x - h_1 / 2, points[i][j].y + h_2 / 2 };
             Point down_right = Point{ points[i][j].x + h_1 / 2, points[i][j].y - h_2 / 2 };
@@ -245,8 +249,9 @@ int main()
             }
         }
     }
-
+    #pragma omp parallel for
     for (int i = 1; i < grid_size; i++) {
+        #pragma omp parallel for
         for (int j = 1; j < grid_size; j++) {
             double a_i1_j = get_a(points, i + 1, j, h_2, eps);
             double a_ij = get_a(points, i, j, h_2, eps);
@@ -296,10 +301,12 @@ int main()
         }
     }
     delta = 0.000001;
+    cout << endl << endl << endl;
     auto result = resolve(A, F, delta, h_1, h_2, grid_size);
-    auto diff = chrono::steady_clock::now() - start;
+    auto end = chrono::steady_clock::now();
+    auto diff = end - start;
     cout << chrono::duration <double, milli>(diff).count() << " ms" << endl;
-    ofstream output("result_seq.txt");
+    ofstream output("result_OMP_4.txt");
     for (int i = 0; i < grid_size + 1; i++) {
         for (int j = 0; j < grid_size + 1; j++) {
             output << result[i * (grid_size + 1) + j] << " ";
