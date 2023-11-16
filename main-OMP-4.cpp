@@ -9,6 +9,14 @@
 
 using namespace std;
 
+const int grid_size = 160;
+const int monte_carlo_num = 100000;
+const int num_of_threads = 4;
+const double A_1 = -2.0, B_1 = 5.0, A_2 = -2.0, B_2 = 5.0;
+const double h_1 = (B_1 - A_1) / grid_size, h_2 = (B_2 - A_2) / grid_size;
+const double eps = h_1 > h_2 ? h_1 * h_1 : h_2 * h_2;
+double delta = 0.000001;
+
 struct Point {
     double x;
     double y;
@@ -19,18 +27,12 @@ struct Rectangle {
     Point down_right;
 };
 
-enum Position {
-    IN,
-    OUT,
-    INTERSECT
-};
-
 bool point_in_D(const Point& point) {
-    if ((point.x <= 0.0) || (point.x >= 3.0)) return false;
-    else if ((point.y <= 0.0) || point.y >= 3.0) return false;
+    if ((point.x < 0.0) || (point.x > 3.0)) return false;
+    else if ((point.y < 0.0) || point.y > 3.0) return false;
     else {
-        if (point.x < 2.0) return true;
-        else if (point.y < -3.0 * point.x + 9.0) return true;
+        if (point.x <= 2.0) return true;
+        else if (point.y <= -3.0 * point.x + 9.0) return true;
         else return false;
     }
 }
@@ -38,79 +40,48 @@ bool point_in_D(const Point& point) {
 double get_a(const vector<vector<Point>>& points, const int i, const int j, const double step, const double eps) {
     auto point_1 = Point{ points[i][j].x - step * 0.5, points[i][j].y - step * 0.5 };
     auto point_2 = Point{ points[i][j].x - step * 0.5, points[i][j].y + step * 0.5 };
-    
-    bool res_1 = point_in_D(point_1);
-    bool res_2 = point_in_D(point_2);
-    
-    if (res_1 && res_2) return 1.0;
-    else if (!res_1 && !res_2) return 1.0 / eps;
-    else {
-        std::random_device rd_y;
-        std::mt19937 gen_y(rd_y());
-        std::uniform_real_distribution<> y(point_1.y, point_2.y);
-        int counter = 0;
-        for (int i = 0; i < 1000; i++) {
-            double y_t = y(gen_y);
-            if (point_in_D(Point{ point_1.x, y_t })) counter++;
-        }
-        double l = step * counter / 1000;
-        return (l / step) + ((1 - l / step) / eps);
+    if (point_1.y > 3.0 || point_2.y < 0.0) return 1 / eps;
+    std::random_device rd_y;
+    std::mt19937 gen_y(rd_y());
+    std::uniform_real_distribution<> y(point_1.y, point_2.y);
+    int counter = 0;
+    for (int i = 0; i < (monte_carlo_num / 100); i++) {
+        double y_t = y(gen_y);
+        if (point_in_D(Point{ point_1.x, y_t })) counter++;
     }
+    double l = step * counter / (monte_carlo_num / 100);
+    return (l / step) + ((1 - l / step) / eps);
 }
 
 double get_b(const vector<vector<Point>>& points, const int i, const int j, const double step, const double eps) {
     auto point_1 = Point{ points[i][j].x - step * 0.5, points[i][j].y - step * 0.5 };
     auto point_2 = Point{ points[i][j].x + step * 0.5, points[i][j].y - step * 0.5 };
-
-    bool res_1 = point_in_D(point_1);
-    bool res_2 = point_in_D(point_2);
-    if (res_1 && res_2) return 1.0;
-    else if (!res_1 && !res_2) return 1 / eps;
-    else {
-        std::random_device rd_x;
-        std::mt19937 gen_x(rd_x());
-        std::uniform_real_distribution<> x(point_1.x, point_2.x);
-        int counter = 0;
-        for (int i = 0; i < 1000; i++) {
-            double x_t = x(gen_x);
-            if (point_in_D(Point{ x_t, point_1.y })) counter++;
-        }
-        double l = step * counter / 1000;
-        return (l / step) + ((1 - l / step) / eps);
+    if (point_1.x > 3.0 || point_2.x < 0.0) return 1 / eps;
+    std::random_device rd_x;
+    std::mt19937 gen_x(rd_x());
+    std::uniform_real_distribution<> x(point_1.x, point_2.x);
+    int counter = 0;
+    for (int i = 0; i < (monte_carlo_num / 100); i++) {
+        double x_t = x(gen_x);
+        if (point_in_D(Point{ x_t, point_1.y })) counter++;
     }
-}
-
-Position check_rect(Rectangle& rect, double step) {
-    if (point_in_D(Point{ rect.up_left.x, rect.up_left.y })
-        && point_in_D(Point{ rect.down_right.x, rect.up_left.y })
-        && point_in_D(Point{ rect.up_left.x, rect.down_right.y })
-        && point_in_D(Point{ rect.down_right.x, rect.down_right.y })
-        ) {
-        return IN;
-    }
-    else if (!point_in_D(Point{ rect.up_left.x, rect.up_left.y })
-        && !point_in_D(Point{ rect.down_right.x, rect.up_left.y })
-        && !point_in_D(Point{ rect.up_left.x, rect.down_right.y })
-        && !point_in_D(Point{ rect.down_right.x, rect.down_right.y })
-        ) {
-        if (rect.up_left.y > 0 && rect.down_right.y < 0 && rect.up_left.x < 3) return INTERSECT;
-        else return OUT;
-    }
-    else return INTERSECT;
+    double l = step * counter / (monte_carlo_num / 100);
+    return (l / step) + ((1 - l / step) / eps);
 }
 
 double get_intersection_area(Rectangle rect, double step) {
+    if (rect.up_left.x > 3.0 || rect.down_right.x < 0.0 || rect.up_left.y < 0.0 || rect.down_right.y > 3.0) return 0.0;
     std::random_device rd_x, rd_y;
     std::mt19937 gen_x(rd_x()), gen_y(rd_y());
     std::uniform_real_distribution<> x(rect.up_left.x, rect.down_right.x);
     std::uniform_real_distribution<> y(rect.down_right.y, rect.up_left.y);
     int counter = 0;
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < monte_carlo_num; i++) {
         double x_t = x(gen_x);
         double y_t = y(gen_y);
         if (point_in_D(Point{ x_t, y_t })) counter++;
     }
-    return step * step * counter / 1000;
+    return step * step * counter / monte_carlo_num;
 }
 
 void print_grid(const vector<vector<Point>>& points) {
@@ -125,9 +96,9 @@ double get_scalar(const vector<double>& vec_1, const vector<double>& vec_2, cons
     double res = 0;
 #pragma omp parallel for reduction(+:res)
     for (int i = 0; i < vec_1.size(); i++) {
-        res += vec_1[i] * vec_2[i] * h_1 * h_2;
+        res += vec_1[i] * vec_2[i];
     }
-    return res;
+    return res * h_1 * h_2;
 }
 
 double get_norm(const vector<double>& vec, const double h_1, const double h_2) {
@@ -167,7 +138,7 @@ void multiply(vector<double>& vec, const double tau) {
 vector<double> resolve(const vector<vector<double>>& A, const vector<double>& F, const double delta, const double h_1, const double h_2, const int grid_size) {
     int counter = 0;
 
-    vector<double> w_k(F.size());
+    vector<double> w_k(F.size(), 0.0);
     vector<double> w_k_1(F.size());
     vector<double> r_k(w_k_1.size());
     vector<double> A_r_k(r_k.size());
@@ -178,6 +149,7 @@ vector<double> resolve(const vector<vector<double>>& A, const vector<double>& F,
     do {
         mult(A, w_k, r_k, grid_size);
         sub(r_k, F, r_k);
+        double disc = get_norm(r_k, h_1, h_2);
         mult(A, r_k, A_r_k, grid_size);
         A_r_k_norm = get_norm(A_r_k, h_1, h_2);
         tau = get_scalar(A_r_k, r_k, h_1, h_2) / (A_r_k_norm * A_r_k_norm);
@@ -185,17 +157,8 @@ vector<double> resolve(const vector<vector<double>>& A, const vector<double>& F,
         sub(w_k, r_k, w_k_1);
         sub(w_k_1, w_k, w_k_1_w_k);
         d = get_norm(w_k_1_w_k, h_1, h_2);
-        if (counter % 500 == 0)
+        if (counter % 500 == 0) {
             cout << d << endl;
-        if (counter % 25000 == 0) {
-            string filename = "160\\result_" + std::to_string(counter / 25000) + ".txt";
-            ofstream output(filename);
-            for (int i = 0; i < grid_size + 1; i++) {
-                for (int j = 0; j < grid_size + 1; j++) {
-                    output << w_k_1[i * (grid_size + 1) + j] << " ";
-                }
-                output << endl;
-            }
         }
         if (d < delta) {
             cout << counter << endl;
@@ -211,12 +174,7 @@ int main()
 {
     cout << "start" << endl;
     auto start = chrono::steady_clock::now();
-    omp_set_num_threads(4);
-    const int grid_size = 160;
-    const double A_1 = -2.0, B_1 = 6.0, A_2 = -2.0, B_2 = 6.0;
-    const double h_1 = (B_1 - A_1) / grid_size, h_2 = (B_2 - A_2) / grid_size;
-    const double eps = h_1 > h_2 ? h_1 * h_1 : h_2 * h_2;
-    double delta = 0.000001;
+    omp_set_num_threads(num_of_threads);
     vector<double> x_vals_in(grid_size + 1);
     vector<double> y_vals_in(grid_size + 1);
     for (int i = 0; i < grid_size + 1; i++) {
@@ -233,21 +191,13 @@ int main()
     vector<vector<double>> A((grid_size + 1) * (grid_size + 1), vector<double>((grid_size + 1) * (grid_size + 1), 0.0));
 
     vector<double> F((grid_size + 1) * (grid_size + 1), 0.0);
+#pragma omp parallel for
     for (int i = 1; i < grid_size; i++) {
         for (int j = 1; j < grid_size; j++) {
             Point up_left = Point{ points[i][j].x - h_1 / 2, points[i][j].y + h_2 / 2 };
             Point down_right = Point{ points[i][j].x + h_1 / 2, points[i][j].y - h_2 / 2 };
             auto rect = Rectangle{ up_left, down_right };
-            auto res = check_rect(rect, h_1);
-            if (res == IN) {
-                F[i * (grid_size + 1) + j] = 1.0;
-            }
-            else if (res == OUT) {
-                F[i * (grid_size + 1) + j] = 0.0;
-            }
-            else {
-                F[i * (grid_size + 1) + j] = get_intersection_area(rect, h_1) / (h_1 * h_2);
-            }
+            F[i * (grid_size + 1) + j] = get_intersection_area(rect, h_1) / (h_1 * h_2);
         }
     }
 #pragma omp parallel for
