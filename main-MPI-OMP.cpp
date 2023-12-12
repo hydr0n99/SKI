@@ -56,7 +56,6 @@ double get_a(const vector<vector<Point>>& points, const int i, const int j, cons
     std::mt19937 gen_y(rd_y());
     std::uniform_real_distribution<> y(point_1.y, point_2.y);
     int counter = 0;
-    #pragma omp parallel for reduction(+:counter)
     for (int i = 0; i < (monte_carlo_num / 100); i++) {
         double y_t = y(gen_y);
         if (point_in_D(Point{ point_1.x, y_t })) counter++;
@@ -73,7 +72,6 @@ double get_b(const vector<vector<Point>>& points, const int i, const int j, cons
     std::mt19937 gen_x(rd_x());
     std::uniform_real_distribution<> x(point_1.x, point_2.x);
     int counter = 0;
-    #pragma omp parallel for reduction(+:counter)
     for (int i = 0; i < (monte_carlo_num / 100); i++) {
         double x_t = x(gen_x);
         if (point_in_D(Point{ x_t, point_1.y })) counter++;
@@ -89,7 +87,6 @@ double get_intersection_area(Rectangle rect, double step) {
     std::uniform_real_distribution<> x(rect.up_left.x, rect.down_right.x);
     std::uniform_real_distribution<> y(rect.down_right.y, rect.up_left.y);
     int counter = 0;
-    #pragma omp parallel for reduction(+:counter)
     for (int i = 0; i < monte_carlo_num; i++) {
         double x_t = x(gen_x);
         double y_t = y(gen_y);
@@ -152,25 +149,25 @@ void multiply(vector<double>& vec, const double tau) {
 }
 
 void build_vector_4(const int row_count, const int col_count, vector<double>& result, const vector<double>& vec_0, const vector<double>& vec_1, const vector<double>& vec_2, const vector<double>& vec_3) {
-    #pragma omp parallel for collapse(2)
+    #pragma omp parallel for
     for (int i = 0; i < row_count; i++) {
         for (int j = 0; j < col_count; j++) {
             result[i * (col_count * 2 - 1) + j] = vec_0[i * col_count + j];
         }
     }
-    #pragma omp parallel for collapse(2)
+    #pragma omp parallel for
     for (int i = 0; i < row_count; i++) {
         for (int j = 1; j < col_count; j++) {
             result[i * (2 * col_count - 1) + col_count + j - 1] = vec_1[i * (col_count - 1) + j - 1];
         }
     }
-    #pragma omp parallel for collapse(2)
+    #pragma omp parallel for
     for (int i = 1; i < row_count; i++) {
         for (int j = 0; j < col_count; j++) {
             result[(i + row_count - 1) * (col_count * 2 - 1) + j] = vec_2[(i - 1) * col_count + j];
         }
     }
-    #pragma omp parallel for collapse(2)
+    #pragma omp parallel for
     for (int i = 1; i < row_count; i++) {
         for (int j = 1; j < col_count; j++) {
             result[(i + row_count - 1) * (col_count * 2 - 1) + col_count + j - 1] = vec_3[(i - 1) * (col_count - 1) + j - 1];
@@ -226,7 +223,7 @@ int main(int argc, char **argv)
         }
 
         vector<vector<Point>> points(y_vals_in.size(), vector<Point>(x_vals_in.size(), Point{ 0.0, 0.0 }));
-        #pragma omp parallel for collapse(2)
+        #pragma omp parallel for
         for (int i = 0; i < y_vals_in.size(); i++) {
             for (int j = 0; j < x_vals_in.size(); j++) {
                 points[i][j] = Point{ x_vals_in[j], y_vals_in[i] };
@@ -236,7 +233,7 @@ int main(int argc, char **argv)
         vector<double*> A;
         if (nrank == 0) {
             A = vector<double*>(row_count * col_count);
-            #pragma omp parallel for collapse(2)
+            #pragma omp parallel for
             for (int i = 0; i < row_count; i++) {
                 for (int j = 0; j < col_count; j++) {
                     A[i * col_count + j] = new double[6];
@@ -274,7 +271,7 @@ int main(int argc, char **argv)
         }
         else {
             A = vector<double*>((row_count - 1) * col_count);
-            #pragma omp parallel for collapse(2)
+            #pragma omp parallel for
             for (int i = 1; i < row_count; i++) {
                 for (int j = 0; j < col_count; j++) {
                     A[(i - 1) * col_count + j] = new double[6];
@@ -313,7 +310,7 @@ int main(int argc, char **argv)
         vector<pair<int, double>> F;
         if (nrank == 0) {
             F = vector<pair<int, double>>(row_count * col_count, make_pair(0, 0.0));
-            #pragma omp parallel for collapse(2)
+            #pragma omp parallel for
             for (int i = 0; i < row_count; i++) {
                 for (int j = 0; j < col_count; j++) {
                     if (!(i == 0 || j == 0 || j == (col_count - 1))) {
@@ -330,7 +327,7 @@ int main(int argc, char **argv)
         }
         else {
             F = vector<pair<int, double>>((row_count - 1) * col_count, make_pair(0, 0.0));
-            #pragma omp parallel for collapse(2)
+            #pragma omp parallel for
             for (int i = 1; i < row_count; i++) {
                 for (int j = 0; j < col_count; j++) {
                     if (!(i == row_count - 1 || j == 0 || j == (col_count - 1))) {
@@ -503,7 +500,7 @@ int main(int argc, char **argv)
         }
 
         vector<vector<Point>> points(y_vals_in.size(), vector<Point>(x_vals_in.size(), Point{ 0.0, 0.0 }));
-        #pragma omp parallel for collapse(2)
+        #pragma omp parallel for
         for (int i = 0; i < y_vals_in.size(); i++) {
             for (int j = 0; j < x_vals_in.size(); j++) {
                 points[i][j] = Point{ x_vals_in[j], y_vals_in[i] };
@@ -513,7 +510,7 @@ int main(int argc, char **argv)
         vector<double*> A;
         if (nrank == 0) {
             A = vector<double*>(row_count * col_count);
-            #pragma omp parallel for collapse(2)
+            #pragma omp parallel for
             for (int i = 0; i < row_count; i++) {
                 for (int j = 0; j < col_count; j++) {
                     A[i * col_count + j] = new double[6];
@@ -551,7 +548,6 @@ int main(int argc, char **argv)
             A = vector<double*>(row_count * (col_count - 1));
             #pragma omp parallel
             for (int i = 0; i < row_count; i++) {
-                #pragma omp parallel for
                 for (int j = 1; j < col_count; j++) {
                     A[i * (col_count - 1) + j - 1] = new double[6];
                     if (i == 0 || j == (col_count - 1)) {
@@ -586,7 +582,6 @@ int main(int argc, char **argv)
             A = vector<double*>((row_count - 1) * col_count);
             #pragma omp parallel for
             for (int i = 1; i < row_count; i++) {
-                #pragma omp parallel for
                 for (int j = 0; j < col_count; j++) {
                     A[(i - 1) * col_count + j] = new double[6];
                     if (j == 0 || i == (row_count - 1)) {
@@ -623,7 +618,6 @@ int main(int argc, char **argv)
             A = vector<double*>((row_count - 1) * (col_count - 1));
             #pragma omp parallel for
             for (int i = 1; i < row_count; i++) {
-                #pragma omp parallel for
                 for (int j = 1; j < col_count; j++) {
                     A[(i - 1) * (col_count - 1) + j - 1] = new double[6];
                     if (i == (row_count - 1) || j == (col_count - 1)) {
@@ -660,7 +654,6 @@ int main(int argc, char **argv)
             F = vector<pair<int, double>>(row_count * col_count, make_pair(0, 0.0));
             #pragma omp parallel for
             for (int i = 0; i < row_count; i++) {
-                #pragma omp parallel for
                 for (int j = 0; j < col_count; j++) {
                     if (!(i == 0 || j == 0)) {
                         Point up_left = Point{ points[i][j].x - h_1 / 2, points[i][j].y + h_2 / 2 };
@@ -677,7 +670,6 @@ int main(int argc, char **argv)
             F = vector<pair<int, double>>(row_count * (col_count - 1), make_pair(0, 0.0));
             #pragma omp parallel for
             for (int i = 0; i < row_count; i++) {
-                #pragma omp parallel for
                 for (int j = 1; j < col_count; j++) {
                     if (!(i == 0 || j == col_count - 1)) {
                         Point up_left = Point{ points[i][j].x - h_1 / 2, points[i][j].y + h_2 / 2 };
@@ -694,7 +686,6 @@ int main(int argc, char **argv)
             F = vector<pair<int, double>>((row_count - 1) * col_count, make_pair(0, 0.0));
             #pragma omp parallel for
             for (int i = 1; i < row_count; i++) {
-                #pragma omp parallel for
                 for (int j = 0; j < col_count; j++) {
                     if (!(i == row_count - 1 || j == 0)) {
                         Point up_left = Point{ points[i][j].x - h_1 / 2, points[i][j].y + h_2 / 2 };
@@ -711,7 +702,6 @@ int main(int argc, char **argv)
             F = vector<pair<int, double>>((row_count - 1) * (col_count - 1), make_pair(0, 0.0));
             #pragma omp parallel for
             for (int i = 1; i < row_count; i++) {
-                #pragma omp parallel for
                 for (int j = 1; j < col_count; j++) {
                     if (!(i == row_count - 1 || j == row_count)) {
                         Point up_left = Point{ points[i][j].x - h_1 / 2, points[i][j].y + h_2 / 2 };
